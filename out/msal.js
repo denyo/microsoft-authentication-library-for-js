@@ -8,6 +8,12 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
 var Msal;
 (function (Msal) {
     var AuthorityType;
@@ -472,6 +478,26 @@ var Msal;
             enumerable: true,
             configurable: true
         });
+        Object.defineProperty(Constants, "msalClientInfo", {
+            get: function () { return "msal.client.info"; },
+            enumerable: true,
+            configurable: true
+        });
+        Object.defineProperty(Constants, "msalError", {
+            get: function () { return "msal.error"; },
+            enumerable: true,
+            configurable: true
+        });
+        Object.defineProperty(Constants, "msalErrorDescription", {
+            get: function () { return "msal.error.description"; },
+            enumerable: true,
+            configurable: true
+        });
+        Object.defineProperty(Constants, "msalSessionState", {
+            get: function () { return "msal.session.state"; },
+            enumerable: true,
+            configurable: true
+        });
         Object.defineProperty(Constants, "tokenKeys", {
             get: function () { return "msal.token.keys"; },
             enumerable: true,
@@ -529,6 +555,11 @@ var Msal;
         });
         Object.defineProperty(Constants, "renewStatus", {
             get: function () { return "msal.token.renew.status"; },
+            enumerable: true,
+            configurable: true
+        });
+        Object.defineProperty(Constants, "msal", {
+            get: function () { return "msal"; },
             enumerable: true,
             configurable: true
         });
@@ -636,6 +667,11 @@ var Msal;
             enumerable: true,
             configurable: true
         });
+        Object.defineProperty(ErrorCodes, "userCancelledError", {
+            get: function () { return "user_cancelled"; },
+            enumerable: true,
+            configurable: true
+        });
         return ErrorCodes;
     }());
     Msal.ErrorCodes = ErrorCodes;
@@ -669,6 +705,11 @@ var Msal;
         });
         Object.defineProperty(ErrorDescription, "userLoginError", {
             get: function () { return "User login is required"; },
+            enumerable: true,
+            configurable: true
+        });
+        Object.defineProperty(ErrorDescription, "userCancelledError", {
+            get: function () { return "User closed the popup window window and cancelled the flow"; },
             enumerable: true,
             configurable: true
         });
@@ -999,7 +1040,7 @@ var Msal;
             if (storage) {
                 var key = void 0;
                 for (key in storage) {
-                    if (storage.hasOwnProperty(key)) {
+                    if (storage.hasOwnProperty(key) && key.indexOf(Msal.Constants.msal) !== -1) {
                         storage[key] = "";
                     }
                 }
@@ -1061,13 +1102,26 @@ var Msal;
         token: "token",
         id_token_token: "id_token token"
     };
+    var resolveTokenOnlyIfOutOfIframe = function (target, propertyKey, descriptor) {
+        var tokenAcquisitionMethod = descriptor.value;
+        descriptor.value = function () {
+            var args = [];
+            for (var _i = 0; _i < arguments.length; _i++) {
+                args[_i] = arguments[_i];
+            }
+            return this.isInIframe()
+                ? new Promise(function () { })
+                : tokenAcquisitionMethod.apply(this, args);
+        };
+        return descriptor;
+    };
     var UserAgentApplication = (function () {
-        function UserAgentApplication(clientId, authority, tokenReceivedCallback, validateAuthority) {
+        function UserAgentApplication(clientId, authority, tokenReceivedCallback, _a) {
+            var _b = _a === void 0 ? {} : _a, _c = _b.validateAuthority, validateAuthority = _c === void 0 ? true : _c, _d = _b.cacheLocation, cacheLocation = _d === void 0 ? 'sessionStorage' : _d, _e = _b.redirectUri, redirectUri = _e === void 0 ? window.location.href.split("?")[0].split("#")[0] : _e, _f = _b.postLogoutRedirectUri, postLogoutRedirectUri = _f === void 0 ? redirectUri : _f, _g = _b.navigateToLoginRequestUrl, navigateToLoginRequestUrl = _g === void 0 ? true : _g;
             this._cacheLocations = {
                 localStorage: "localStorage",
                 sessionStorage: "sessionStorage"
             };
-            this._cacheLocation = "sessionStorage";
             this._interactionModes = {
                 popUp: "popUp",
                 redirect: "redirect"
@@ -1075,19 +1129,22 @@ var Msal;
             this._interactionMode = "redirect";
             this._clockSkew = 300;
             this._tokenReceivedCallback = null;
-            this.navigateToLoginRequestUrl = true;
+            this._navigateToLoginRequestUrl = true;
             this.clientId = clientId;
-            this.validateAuthority = validateAuthority === true;
-            this.authority = authority ? authority : "https://login.microsoftonline.com/common";
-            if (tokenReceivedCallback) {
-                this._tokenReceivedCallback = tokenReceivedCallback;
-            }
-            this.redirectUri = window.location.href.split("?")[0].split("#")[0];
-            this.postLogoutredirectUri = this.redirectUri;
+            this.validateAuthority = validateAuthority;
+            this.authority = authority || "https://login.microsoftonline.com/common";
+            this._tokenReceivedCallback = tokenReceivedCallback;
+            this._redirectUri = redirectUri;
+            this._postLogoutredirectUri = postLogoutRedirectUri;
+            this._navigateToLoginRequestUrl = navigateToLoginRequestUrl;
             this._loginInProgress = false;
             this._acquireTokenInProgress = false;
             this._renewStates = [];
             this._activeRenewals = {};
+            this._cacheLocation = cacheLocation;
+            if (!this._cacheLocations[cacheLocation]) {
+                throw new Error('Cache Location is not valid. Provided value:' + this._cacheLocation + '.Possible values are: ' + this._cacheLocations.localStorage + ', ' + this._cacheLocations.sessionStorage);
+            }
             this._cacheStorage = new Msal.Storage(this._cacheLocation);
             this._requestContext = new Msal.RequestContext("");
             window.msal = this;
@@ -1095,22 +1152,15 @@ var Msal;
             window.callBacksMappedToRenewStates = {};
             if (!window.opener) {
                 var isCallback = this.isCallback(window.location.hash);
-                if (isCallback)
-                    this.handleAuthenticationResponse(window.location.hash);
+                if (isCallback) {
+                    var self = this;
+                    setTimeout(function () { self.handleAuthenticationResponse(window.location.hash); }, 0);
+                }
             }
         }
         Object.defineProperty(UserAgentApplication.prototype, "cacheLocation", {
             get: function () {
                 return this._cacheLocation;
-            },
-            set: function (cache) {
-                this._cacheLocation = cache;
-                if (this._cacheLocations[cache]) {
-                    this._cacheStorage = new Msal.Storage(this._cacheLocations[cache]);
-                }
-                else {
-                    throw new Error('Cache Location is not valid. Provided value:' + this._cacheLocation + '.Possible values are: ' + this._cacheLocations.localStorage + ', ' + this._cacheLocations.sessionStorage);
-                }
             },
             enumerable: true,
             configurable: true
@@ -1145,7 +1195,7 @@ var Msal;
             }
             this.authorityInstance.ResolveEndpointsAsync()
                 .then(function () {
-                var authenticationRequest = new Msal.AuthenticationRequestParameters(_this.authorityInstance, _this.clientId, scopes, ResponseTypes.id_token, _this.redirectUri);
+                var authenticationRequest = new Msal.AuthenticationRequestParameters(_this.authorityInstance, _this.clientId, scopes, ResponseTypes.id_token, _this._redirectUri);
                 if (extraQueryParameters) {
                     authenticationRequest.extraQueryParameters = extraQueryParameters;
                 }
@@ -1153,8 +1203,8 @@ var Msal;
                 _this._cacheStorage.setItem(Msal.Constants.loginError, "");
                 _this._cacheStorage.setItem(Msal.Constants.stateLogin, authenticationRequest.state);
                 _this._cacheStorage.setItem(Msal.Constants.nonceIdToken, authenticationRequest.nonce);
-                _this._cacheStorage.setItem(Msal.Constants.error, "");
-                _this._cacheStorage.setItem(Msal.Constants.errorDescription, "");
+                _this._cacheStorage.setItem(Msal.Constants.msalError, "");
+                _this._cacheStorage.setItem(Msal.Constants.msalErrorDescription, "");
                 var authorityKey = Msal.Constants.authority + Msal.Constants.resourceDelimeter + authenticationRequest.state;
                 if (Msal.Utils.isEmpty(_this._cacheStorage.getItem(authorityKey))) {
                     _this._cacheStorage.setItem(authorityKey, _this.authority);
@@ -1185,7 +1235,7 @@ var Msal;
                     return;
                 }
                 _this.authorityInstance.ResolveEndpointsAsync().then(function () {
-                    var authenticationRequest = new Msal.AuthenticationRequestParameters(_this.authorityInstance, _this.clientId, scopes, ResponseTypes.id_token, _this.redirectUri);
+                    var authenticationRequest = new Msal.AuthenticationRequestParameters(_this.authorityInstance, _this.clientId, scopes, ResponseTypes.id_token, _this._redirectUri);
                     if (extraQueryParameters) {
                         authenticationRequest.extraQueryParameters = extraQueryParameters;
                     }
@@ -1193,8 +1243,8 @@ var Msal;
                     _this._cacheStorage.setItem(Msal.Constants.loginError, "");
                     _this._cacheStorage.setItem(Msal.Constants.stateLogin, authenticationRequest.state);
                     _this._cacheStorage.setItem(Msal.Constants.nonceIdToken, authenticationRequest.nonce);
-                    _this._cacheStorage.setItem(Msal.Constants.error, "");
-                    _this._cacheStorage.setItem(Msal.Constants.errorDescription, "");
+                    _this._cacheStorage.setItem(Msal.Constants.msalError, "");
+                    _this._cacheStorage.setItem(Msal.Constants.msalErrorDescription, "");
                     var authorityKey = Msal.Constants.authority + Msal.Constants.resourceDelimeter + authenticationRequest.state;
                     if (Msal.Utils.isEmpty(_this._cacheStorage.getItem(authorityKey))) {
                         _this._cacheStorage.setItem(authorityKey, _this.authority);
@@ -1206,8 +1256,8 @@ var Msal;
                     }
                 }, function () {
                     _this._requestContext.logger.info(Msal.ErrorCodes.endpointResolutionError + ':' + Msal.ErrorDescription.endpointResolutionError);
-                    _this._cacheStorage.setItem(Msal.Constants.error, Msal.ErrorCodes.endpointResolutionError);
-                    _this._cacheStorage.setItem(Msal.Constants.errorDescription, Msal.ErrorDescription.endpointResolutionError);
+                    _this._cacheStorage.setItem(Msal.Constants.msalError, Msal.ErrorCodes.endpointResolutionError);
+                    _this._cacheStorage.setItem(Msal.Constants.msalErrorDescription, Msal.ErrorDescription.endpointResolutionError);
                     if (reject) {
                         reject(Msal.ErrorCodes.endpointResolutionError + ':' + Msal.ErrorDescription.endpointResolutionError);
                     }
@@ -1234,22 +1284,26 @@ var Msal;
                 instance._loginInProgress = false;
                 instance._acquireTokenInProgress = false;
                 this._requestContext.logger.info(Msal.ErrorCodes.popUpWindowError + ':' + Msal.ErrorDescription.popUpWindowError);
-                this._cacheStorage.setItem(Msal.Constants.error, Msal.ErrorCodes.popUpWindowError);
-                this._cacheStorage.setItem(Msal.Constants.errorDescription, Msal.ErrorDescription.popUpWindowError);
+                this._cacheStorage.setItem(Msal.Constants.msalError, Msal.ErrorCodes.popUpWindowError);
+                this._cacheStorage.setItem(Msal.Constants.msalErrorDescription, Msal.ErrorDescription.popUpWindowError);
                 if (reject) {
                     reject(Msal.ErrorCodes.popUpWindowError + ':' + Msal.ErrorDescription.popUpWindowError);
                 }
                 return null;
             }
             var pollTimer = window.setInterval(function () {
-                if (!popupWindow || popupWindow.closed || popupWindow.closed === undefined) {
+                if (popupWindow && popupWindow.closed && instance._loginInProgress) {
                     instance._loginInProgress = false;
                     instance._acquireTokenInProgress = false;
+                    if (reject) {
+                        reject(Msal.ErrorCodes.userCancelledError + ':' + Msal.ErrorDescription.userCancelledError);
+                    }
                     window.clearInterval(pollTimer);
                 }
                 try {
-                    if (popupWindow.location.href.indexOf(_this.redirectUri) !== -1) {
-                        _this.handleAuthenticationResponse(popupWindow.location.hash, resolve, reject);
+                    var popUpWindowLocation = popupWindow.location;
+                    if (popUpWindowLocation.href.indexOf(_this._redirectUri) !== -1) {
+                        _this.handleAuthenticationResponse(popUpWindowLocation.hash, resolve, reject);
                         window.clearInterval(pollTimer);
                         instance._loginInProgress = false;
                         instance._acquireTokenInProgress = false;
@@ -1266,8 +1320,8 @@ var Msal;
             this.clearCache();
             this._user = null;
             var logout = "";
-            if (this.postLogoutredirectUri) {
-                logout = 'post_logout_redirect_uri=' + encodeURIComponent(this.postLogoutredirectUri);
+            if (this._postLogoutredirectUri) {
+                logout = 'post_logout_redirect_uri=' + encodeURIComponent(this._postLogoutredirectUri);
             }
             var urlNavigate = this.authority + "/oauth2/v2.0/logout?" + logout;
             this.promptUser(urlNavigate);
@@ -1530,10 +1584,10 @@ var Msal;
             var acquireTokenAuthority = authority ? Msal.Authority.CreateInstance(authority, this.validateAuthority) : this.authorityInstance;
             acquireTokenAuthority.ResolveEndpointsAsync().then(function () {
                 if (Msal.Utils.compareObjects(userObject, _this._user)) {
-                    authenticationRequest = new Msal.AuthenticationRequestParameters(acquireTokenAuthority, _this.clientId, scopes, ResponseTypes.token, _this.redirectUri);
+                    authenticationRequest = new Msal.AuthenticationRequestParameters(acquireTokenAuthority, _this.clientId, scopes, ResponseTypes.token, _this._redirectUri);
                 }
                 else {
-                    authenticationRequest = new Msal.AuthenticationRequestParameters(acquireTokenAuthority, _this.clientId, scopes, ResponseTypes.id_token_token, _this.redirectUri);
+                    authenticationRequest = new Msal.AuthenticationRequestParameters(acquireTokenAuthority, _this.clientId, scopes, ResponseTypes.id_token_token, _this._redirectUri);
                 }
                 _this._cacheStorage.setItem(Msal.Constants.nonceIdToken, authenticationRequest.nonce);
                 var acquireTokenUserKey = Msal.Constants.acquireTokenUser + Msal.Constants.resourceDelimeter + userObject.userIdentifier + Msal.Constants.resourceDelimeter + authenticationRequest.state;
@@ -1585,10 +1639,10 @@ var Msal;
                 }
                 acquireTokenAuthority.ResolveEndpointsAsync().then(function () {
                     if (Msal.Utils.compareObjects(userObject, _this._user)) {
-                        authenticationRequest = new Msal.AuthenticationRequestParameters(acquireTokenAuthority, _this.clientId, scopes, ResponseTypes.token, _this.redirectUri);
+                        authenticationRequest = new Msal.AuthenticationRequestParameters(acquireTokenAuthority, _this.clientId, scopes, ResponseTypes.token, _this._redirectUri);
                     }
                     else {
-                        authenticationRequest = new Msal.AuthenticationRequestParameters(acquireTokenAuthority, _this.clientId, scopes, ResponseTypes.id_token_token, _this.redirectUri);
+                        authenticationRequest = new Msal.AuthenticationRequestParameters(acquireTokenAuthority, _this.clientId, scopes, ResponseTypes.id_token_token, _this._redirectUri);
                     }
                     _this._cacheStorage.setItem(Msal.Constants.nonceIdToken, authenticationRequest.nonce);
                     authenticationRequest.state = authenticationRequest.state;
@@ -1612,8 +1666,8 @@ var Msal;
                     }
                 }, function () {
                     _this._requestContext.logger.info(Msal.ErrorCodes.endpointResolutionError + ':' + Msal.ErrorDescription.endpointResolutionError);
-                    _this._cacheStorage.setItem(Msal.Constants.error, Msal.ErrorCodes.endpointResolutionError);
-                    _this._cacheStorage.setItem(Msal.Constants.errorDescription, Msal.ErrorDescription.endpointResolutionError);
+                    _this._cacheStorage.setItem(Msal.Constants.msalError, Msal.ErrorCodes.endpointResolutionError);
+                    _this._cacheStorage.setItem(Msal.Constants.msalErrorDescription, Msal.ErrorDescription.endpointResolutionError);
                     if (reject) {
                         reject(Msal.ErrorCodes.endpointResolutionError + ':' + Msal.ErrorDescription.endpointResolutionError);
                     }
@@ -1642,10 +1696,15 @@ var Msal;
                     var authenticationRequest_1;
                     var newAuthority = authority ? Msal.Authority.CreateInstance(authority, _this.validateAuthority) : _this.authorityInstance;
                     if (Msal.Utils.compareObjects(userObject_1, _this._user)) {
-                        authenticationRequest_1 = new Msal.AuthenticationRequestParameters(newAuthority, _this.clientId, scopes, ResponseTypes.token, _this.redirectUri);
+                        if (scopes.indexOf(_this.clientId) > -1) {
+                            authenticationRequest_1 = new Msal.AuthenticationRequestParameters(newAuthority, _this.clientId, scopes, ResponseTypes.id_token, _this._redirectUri);
+                        }
+                        else {
+                            authenticationRequest_1 = new Msal.AuthenticationRequestParameters(newAuthority, _this.clientId, scopes, ResponseTypes.token, _this._redirectUri);
+                        }
                     }
                     else {
-                        authenticationRequest_1 = new Msal.AuthenticationRequestParameters(newAuthority, _this.clientId, scopes, ResponseTypes.id_token_token, _this.redirectUri);
+                        authenticationRequest_1 = new Msal.AuthenticationRequestParameters(newAuthority, _this.clientId, scopes, ResponseTypes.id_token_token, _this._redirectUri);
                     }
                     var cacheResult = _this.getCachedToken(authenticationRequest_1, userObject_1);
                     if (cacheResult) {
@@ -1721,7 +1780,7 @@ var Msal;
                     adalFrame = document.getElementsByTagName("body")[0].appendChild(ifr);
                 }
                 else if (document.body && document.body.insertAdjacentHTML) {
-                    document.body.insertAdjacentHTML('beforeEnd', '<iframe name="' + iframeId + '" id="' + iframeId + '" style="display:none"></iframe>');
+                    document.body.insertAdjacentHTML('beforeend', '<iframe name="' + iframeId + '" id="' + iframeId + '" style="display:none"></iframe>');
                 }
                 if (window.frames && window.frames[iframeId]) {
                     adalFrame = window.frames[iframeId];
@@ -1777,14 +1836,14 @@ var Msal;
             this.registerCallback(authenticationRequest.state, this.clientId, resolve, reject);
             this._requestContext.logger.infoPii('Navigate to:' + urlNavigate);
             frameHandle.src = "about:blank";
-            this.loadFrameTimeout(urlNavigate, "adalIdTokenFrame", this.clientId);
+            this.loadFrameTimeout(urlNavigate, "msalIdTokenFrame", this.clientId);
         };
         UserAgentApplication.prototype.getUser = function () {
             if (this._user) {
                 return this._user;
             }
             var rawIdToken = this._cacheStorage.getItem(Msal.Constants.idTokenKey);
-            var rawClientInfo = this._cacheStorage.getItem(Msal.Constants.clientInfo);
+            var rawClientInfo = this._cacheStorage.getItem(Msal.Constants.msalClientInfo);
             if (!Msal.Utils.isEmpty(rawIdToken) && !Msal.Utils.isEmpty(rawClientInfo)) {
                 var idToken = new Msal.IdToken(rawIdToken);
                 var clientInfo = new Msal.ClientInfo(rawClientInfo);
@@ -1804,7 +1863,7 @@ var Msal;
                 this.saveTokenFromHash(requestInfo);
                 var token = null, tokenReceivedCallback = null, tokenType = void 0;
                 if ((requestInfo.requestType === Msal.Constants.renewToken) && window.parent) {
-                    if (window.parent !== window)
+                    if (this.isInIframe())
                         this._requestContext.logger.verbose("Window is in iframe, acquiring token silently");
                     else
                         this._requestContext.logger.verbose("acquiring token interactive in progress");
@@ -1840,7 +1899,7 @@ var Msal;
                 }
                 if (this._interactionMode !== this._interactionModes.popUp) {
                     window.location.hash = "";
-                    if (this.navigateToLoginRequestUrl && window.location.href.replace("#", "") !== this._cacheStorage.getItem(Msal.Constants.loginRequest))
+                    if (this._navigateToLoginRequestUrl && window.location.href.replace("#", "") !== this._cacheStorage.getItem(Msal.Constants.loginRequest))
                         window.location.href = this._cacheStorage.getItem(Msal.Constants.loginRequest);
                 }
             }
@@ -1873,8 +1932,8 @@ var Msal;
         };
         UserAgentApplication.prototype.saveTokenFromHash = function (tokenResponse) {
             this._requestContext.logger.info('State status:' + tokenResponse.stateMatch + '; Request type:' + tokenResponse.requestType);
-            this._cacheStorage.setItem(Msal.Constants.error, "");
-            this._cacheStorage.setItem(Msal.Constants.errorDescription, "");
+            this._cacheStorage.setItem(Msal.Constants.msalError, "");
+            this._cacheStorage.setItem(Msal.Constants.msalErrorDescription, "");
             var scope = '';
             if (tokenResponse.parameters.hasOwnProperty("scope")) {
                 scope = tokenResponse.parameters["scope"];
@@ -1884,8 +1943,8 @@ var Msal;
             }
             if (tokenResponse.parameters.hasOwnProperty(Msal.Constants.errorDescription) || tokenResponse.parameters.hasOwnProperty(Msal.Constants.error)) {
                 this._requestContext.logger.info('Error :' + tokenResponse.parameters[Msal.Constants.error] + '; Error description:' + tokenResponse.parameters[Msal.Constants.errorDescription]);
-                this._cacheStorage.setItem(Msal.Constants.error, tokenResponse.parameters["error"]);
-                this._cacheStorage.setItem(Msal.Constants.errorDescription, tokenResponse.parameters[Msal.Constants.errorDescription]);
+                this._cacheStorage.setItem(Msal.Constants.msalError, tokenResponse.parameters["error"]);
+                this._cacheStorage.setItem(Msal.Constants.msalErrorDescription, tokenResponse.parameters[Msal.Constants.errorDescription]);
                 if (tokenResponse.requestType === Msal.Constants.login) {
                     this._loginInProgress = false;
                     this._cacheStorage.setItem(Msal.Constants.loginError, tokenResponse.parameters[Msal.Constants.errorDescription] + ':' + tokenResponse.parameters[Msal.Constants.error]);
@@ -1898,7 +1957,7 @@ var Msal;
                 if (tokenResponse.stateMatch) {
                     this._requestContext.logger.info("State is right");
                     if (tokenResponse.parameters.hasOwnProperty(Msal.Constants.sessionState))
-                        this._cacheStorage.setItem(Msal.Constants.sessionState, tokenResponse.parameters[Msal.Constants.sessionState]);
+                        this._cacheStorage.setItem(Msal.Constants.msalSessionState, tokenResponse.parameters[Msal.Constants.sessionState]);
                     var idToken;
                     var clientInfo = '';
                     if (tokenResponse.parameters.hasOwnProperty(Msal.Constants.accessToken)) {
@@ -1963,20 +2022,20 @@ var Msal;
                                 }
                                 else {
                                     this._cacheStorage.setItem(Msal.Constants.idTokenKey, tokenResponse.parameters[Msal.Constants.idToken]);
-                                    this._cacheStorage.setItem(Msal.Constants.clientInfo, clientInfo);
+                                    this._cacheStorage.setItem(Msal.Constants.msalClientInfo, clientInfo);
                                     this.saveAccessToken(authority, tokenResponse, this._user, clientInfo, idToken);
                                 }
                             }
                             else {
-                                this._cacheStorage.setItem(Msal.Constants.error, 'invalid idToken');
-                                this._cacheStorage.setItem(Msal.Constants.errorDescription, 'Invalid idToken. idToken: ' + tokenResponse.parameters[Msal.Constants.idToken]);
+                                this._cacheStorage.setItem(Msal.Constants.msalError, 'invalid idToken');
+                                this._cacheStorage.setItem(Msal.Constants.msalErrorDescription, 'Invalid idToken. idToken: ' + tokenResponse.parameters[Msal.Constants.idToken]);
                             }
                         }
                     }
                 }
                 else {
-                    this._cacheStorage.setItem(Msal.Constants.error, 'Invalid_state');
-                    this._cacheStorage.setItem(Msal.Constants.errorDescription, 'Invalid_state. state: ' + tokenResponse.stateResponse);
+                    this._cacheStorage.setItem(Msal.Constants.msalError, 'Invalid_state');
+                    this._cacheStorage.setItem(Msal.Constants.msalErrorDescription, 'Invalid_state. state: ' + tokenResponse.stateResponse);
                 }
             }
             this._cacheStorage.setItem(Msal.Constants.renewStatus + scope, Msal.Constants.tokenRenewStatusCompleted);
@@ -2055,8 +2114,14 @@ var Msal;
             return "";
         };
         ;
+        UserAgentApplication.prototype.isInIframe = function () {
+            return window.parent !== window;
+        };
         return UserAgentApplication;
     }());
+    __decorate([
+        resolveTokenOnlyIfOutOfIframe
+    ], UserAgentApplication.prototype, "acquireTokenSilent", null);
     Msal.UserAgentApplication = UserAgentApplication;
 })(Msal || (Msal = {}));
 var Msal;
